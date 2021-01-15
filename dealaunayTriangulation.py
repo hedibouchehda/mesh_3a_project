@@ -109,17 +109,53 @@ def get_extremums(set_of_points) :
   Ymin -= 5  
   return Xmax,Ymax,Xmin,Ymin 
 
-#quelques tests 
-list_of_vertices = [Vertex(0,0,0),Vertex(0,1,1),Vertex(1,0,2),Vertex(1,1,3),Vertex(1,1.2,3),Vertex(1,1.5,3)]
-edge1 = Edge(list_of_vertices[0],list_of_vertices[1]) 
-edge2 = Edge(list_of_vertices[1],list_of_vertices[0]) 
-edge3 = Edge(list_of_vertices[2],list_of_vertices[1])
-#creating fictional points to construct the first two triangles 
 def build_fictional_points(list_of_vertices) : 
   Xmax,Ymax,Xmin,Ymin = get_extremums(list_of_vertices) 
   fictional_points = [] 
   fictional_points.extend([Vertex(Xmin,Ymin,-1),Vertex(Xmax,Ymin,-2),Vertex(Xmax,Ymax,-3),Vertex(Xmin,Ymax,-4)])
   return fictional_points
+
+  #lire le fichier .geo 
+#NB : dans la consruction de la géométrie on construit les arêtes dans le sens d'horloge  
+def read_geometry(geo_file_path) :
+    list_of_vertices = [] 
+    list_of_boundary_edges = [] 
+    list_of_point_ids_in_order = []  # va contenir les points dans le sens de l'horloge 
+                                     #elle permettra de supprimer les triangles qui sont en dehors du domaine   
+    f = open(geo_file_path,'r')  
+    point_id = 0 
+    for line in f :
+        #lecturre des points
+        if line[0] == 'P' : 
+            coords = line.split() 
+            for i in range(2,4):  
+                coords[i] = coords[i].replace(' ','')
+                coords[i] = coords[i].replace(',','')
+                coords[i] = coords[i].replace('{','') 
+                coords[i] = coords[i].replace('}','')
+                coords[i] = coords[i].replace(';','')
+                coords[i] = float(coords[i]) 
+            list_of_vertices.append(Vertex(coords[2],coords[3],point_id)) 
+            point_id += 1 
+        #lecture des lignes  
+        if line[0] == 'L': 
+            coords = line.split() 
+            for i in range(2,4):  
+                coords[i] = coords[i].replace(' ','')
+                coords[i] = coords[i].replace(',','')
+                coords[i] = coords[i].replace('{','') 
+                coords[i] = coords[i].replace('}','')
+                coords[i] = coords[i].replace(';','')
+                coords[i] = int(coords[i]) 
+            list_of_boundary_edges.append(Edge(list_of_vertices[coords[2]-1],list_of_vertices[coords[3]-1]))
+            list_of_point_ids_in_order.append(coords[2]-1)      
+    return list_of_vertices,list_of_boundary_edges,list_of_point_ids_in_order 
+
+
+list_of_vertices,list_of_boundary_edges,list_of_point_ids_in_order = read_geometry('../de.geo')
+
+
+
  
 #Delaunay Triangulation engine
 
@@ -132,6 +168,10 @@ for point_index in range(len(list_of_vertices)) :
   wrong_triangles = [] # les triangles dont le point est dans le cercle circonscrit  
   for triangle_index in range(len(list_of_triangles)) : #la condition d'apparatenance au cercle 
     if (list_of_triangles[triangle_index].point_in_disc(list_of_vertices[point_index])) : 
+      vertices = list_of_triangles[triangle_index].vertices
+      triangle_id = list_of_triangles[triangle_index].idx
+      for vertex_num in range(3) : 
+        vertices[vertex_num].remove_triangle(triangle_id)
       wrong_triangles.append(list_of_triangles[triangle_index])  
       list_of_triangles[triangle_index] = None 
   if (len(wrong_triangles)>0) : #si cette condtion n'est pas vérifié en passe   
@@ -145,7 +185,7 @@ for point_index in range(len(list_of_vertices)) :
     #élimination des arêtes qui se répètent 
     for i in range(len(list_of_edges_of_wrong_triangles)-1) : 
       for j in range(i,len(list_of_edges_of_wrong_triangles)) : 
-        if (list_of_edges_of_wrong_triangles[i] != None and list_of_edges_of_wrong_triangles != None) : 
+        if (list_of_edges_of_wrong_triangles[i] != None and list_of_edges_of_wrong_triangles[j] != None) : 
           if is_the_same_edge(list_of_edges_of_wrong_triangles[i],list_of_edges_of_wrong_triangles[j]) : 
             list_of_edges_of_wrong_triangles[i] = None  
             list_of_edges_of_wrong_triangles[j] = None 
@@ -154,3 +194,51 @@ for point_index in range(len(list_of_vertices)) :
     for i in range(len(list_of_edges_of_wrong_triangles)) : 
       last_idx += 1 
       list_of_triangles.append(Triangle(list_of_edges_of_wrong_triangles[i].vertex1,list_of_edges_of_wrong_triangles[i].vertex2,list_of_vertices[point_index],last_idx))  
+
+#forçage des arêtes de bords 
+
+#retourner un tableau contenant une liste d'arêtes qui contiennent le vertex
+def edges_containing_vertex(vertex) : 
+  edges_containing_vertex = []
+  for triangle in vertex.list_of_triangle :  
+    for i in range(3) : 
+      if is_the_same_vertex(vertex1,triangle.vertices[i]) : 
+        pass 
+      else : 
+        edges_containing_vertex.append(Edge(vertex1,triangle.vertices[i])) 
+  return edges_containing_vertex
+
+for boundary_rank in range(len(list_of_boundary_edges)) : 
+  vertex1 = list_of_boundary_edges[boundary_rank].vertex1 
+  vertex2 = list_of_boundary_edges[boundary_rank].vertex2 
+  list_of_points = [] 
+  edges_containing_vertex1 = edges_containing_vertex(vertex1)
+  edges_containing_vertex2 = edges_containing_vertex(vertex2)
+  is_in_triangulation = False
+  for edge_vertex1 in edges_containing_vertex1 : 
+    if is_the_same_edge(edge_vertex1,list_of_boundary_edges[boundary_rank]) : 
+      is_in_triangulation = True 
+  if is_in_triangulation == False : 
+    for edge_vertex1 in edges_containing_vertex1 : 
+      if (is_the_same_vertex(edge_vertex1.vertex1,vertex1)) : 
+        other_vertex_of_edge_vertex1 = edge_vertex1.vertex2 
+      else : 
+        other_vertex_of_edge_vertex1 = edge_vertex1.vertex1
+      for edge_vertex2 in edges_containing_vertex2 : 
+        if (is_the_same_vertex(edge_vertex2.vertex1,vertex2)) : 
+          other_vertex_of_edge_vertex2 = edge_vertex2.vertex2 
+        else : 
+          other_vertex_of_edge_vertex2 = edge_vertex2.vertex1 
+        if (is_the_same_vertex(other_vertex_of_edge_vertex1,other_vertex_of_edge_vertex2)) : 
+          list_of_points.append(other_vertex_of_edge_vertex1) 
+  for i in range(len(list_of_points)) : 
+    last_idx += 1 
+    list_of_triangles.append(Triangle(vertex1,vertex2,list_of_points[i],last_idx))  
+
+
+          
+
+
+  
+
+      

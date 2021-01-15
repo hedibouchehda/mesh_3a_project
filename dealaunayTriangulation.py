@@ -9,12 +9,13 @@ class Vertex :
     self.idx = idx 
     self.list_of_triangle = []
 
-  def add_triangle(self,idx) : 
-    self.list_of_triangle.append(idx)
   
-  def remove_triangle(self,idx) : 
-    self.list_of_triangle.remove(idx)
+  def remove_triangle(self,triangle) : 
+    self.list_of_triangle.remove(triangle)
   
+def add_triangle(vertex,triangle) : 
+  vertex.list_of_triangle.append(triangle)
+
 def dist(vertex1,vertex2) : 
   result = math.sqrt((vertex1.coord_x-vertex2.coord_x)**2+(vertex1.coord_y-vertex2.coord_y)**2)
   return result 
@@ -171,10 +172,10 @@ for point_index in range(len(list_of_vertices)) :
       vertices = list_of_triangles[triangle_index].vertices
       triangle_id = list_of_triangles[triangle_index].idx
       for vertex_num in range(3) : 
-        vertices[vertex_num].remove_triangle(triangle_id)
+        vertices[vertex_num].remove_triangle(list_of_triangles[triangle_index])
       wrong_triangles.append(list_of_triangles[triangle_index])  
       list_of_triangles[triangle_index] = None 
-  if (len(wrong_triangles)>0) : #si cette condtion n'est pas vérifié en passe   
+  if (len(wrong_triangles)>0) : #si cette condtion n'est pas vérifié  pas de problème sur ce point   
     #élimination des triangles inadéquats de la liste des triangles qui sont des None 
     list_of_triangles = list(filter(None,list_of_triangles))
     #on va après construire un tableau contenant les arêtes de chaques triangles on va éliminer les arêtes qui se présentes 2 fois 
@@ -202,11 +203,38 @@ def edges_containing_vertex(vertex) :
   edges_containing_vertex = []
   for triangle in vertex.list_of_triangle :  
     for i in range(3) : 
-      if is_the_same_vertex(vertex1,triangle.vertices[i]) : 
+      if is_the_same_vertex(vertex,triangle.vertices[i]) : 
         pass 
       else : 
-        edges_containing_vertex.append(Edge(vertex1,triangle.vertices[i])) 
-  return edges_containing_vertex
+        edges_containing_vertex.append(Edge(vertex,triangle.vertices[i])) 
+  return edges_containing_vertex 
+
+#retourner un tableau contenant une liste d'arête qui ne contiennent pas le vertex
+#nécessaire pour le cas 1  
+def edges_of_triangles_of_vertex_without_vertex(vertex) : 
+  edges_not_containing_vertex = []
+  for triangle in vertex.list_of_triangle : 
+    vertices_without_vertex = []
+    for i in range(3) : 
+      if is_the_same_vertex(vertex,triangle.vertices[i]) : 
+        pass 
+      else : 
+        vertices_without_vertex.append(triangle.vertices[i]) 
+    edges_not_containing_vertex.append(Edge(vertices_without_vertex[0],vertices_without_vertex[1])) 
+  return edges_not_containing_vertex
+
+#retourner une liste de points contenant les points qui partagent avec vertex des triangles
+#nécessaire pour le cas 2 
+def neighbours_of_vertex(vertex) : 
+  the_points = [] 
+  for triangle in vertex.triangle : 
+    for vertex_of_triangle in triangle.vertices : 
+      if is_the_same_vertex(vertex,vertex_of_triangle) : 
+        pass 
+      else : 
+        the_points.append(vertex_of_triangle) 
+  return the_points 
+      
 
 for boundary_rank in range(len(list_of_boundary_edges)) : 
   vertex1 = list_of_boundary_edges[boundary_rank].vertex1 
@@ -215,25 +243,70 @@ for boundary_rank in range(len(list_of_boundary_edges)) :
   edges_containing_vertex1 = edges_containing_vertex(vertex1)
   edges_containing_vertex2 = edges_containing_vertex(vertex2)
   is_in_triangulation = False
+  #vérifier si la frontière est bien une arête
   for edge_vertex1 in edges_containing_vertex1 : 
     if is_the_same_edge(edge_vertex1,list_of_boundary_edges[boundary_rank]) : 
       is_in_triangulation = True 
+  # si c'est pas le cas traiter les deux cas
   if is_in_triangulation == False : 
-    for edge_vertex1 in edges_containing_vertex1 : 
-      if (is_the_same_vertex(edge_vertex1.vertex1,vertex1)) : 
-        other_vertex_of_edge_vertex1 = edge_vertex1.vertex2 
-      else : 
-        other_vertex_of_edge_vertex1 = edge_vertex1.vertex1
-      for edge_vertex2 in edges_containing_vertex2 : 
-        if (is_the_same_vertex(edge_vertex2.vertex1,vertex2)) : 
-          other_vertex_of_edge_vertex2 = edge_vertex2.vertex2 
-        else : 
-          other_vertex_of_edge_vertex2 = edge_vertex2.vertex1 
-        if (is_the_same_vertex(other_vertex_of_edge_vertex1,other_vertex_of_edge_vertex2)) : 
-          list_of_points.append(other_vertex_of_edge_vertex1) 
-  for i in range(len(list_of_points)) : 
+    #pour traiter le cas 1, on a besoin des lsites contenant les edges sans les deux points de la frontière 
+    edges_without_vertex1 = edges_of_triangles_of_vertex_without_vertex(vertex1) 
+    edges_without_vertex2 = edges_of_triangles_of_vertex_without_vertex(vertex2)
+    common_edge = None 
+    for edge_without_vertex1 in edges_without_vertex1 : 
+      for edge_without_vertex2 in edges_without_vertex2 : 
+        if is_the_same_edge(edge_without_vertex1,edge_without_vertex2) : 
+          common_edge = edge_without_vertex1 
+    if common_edge != None : 
+      triangles_to_delete = [] 
+      vertex1_of_common_edge = common_edge.vertex1 
+      vertex2_of_common_edge = common_edge.vertex2 
+      for triangle_of_vertex1 in vertex1_of_common_edge.list_of_triangle : 
+        for triangle_of_vertex2 in vertex2_of_common_edge.list_of_triangle : 
+          if triangle_of_vertex1.idx == triangle_of_vertex2.idx : 
+            triangles_to_delete.append(triangle_of_vertex1) 
+      #on supprime les triangles de la liste des triangles des vertices de ces triangles 
+      for triangle in triangles_to_delete : 
+        for vertex in triangle.vertices : 
+          vertex.remove(triangle)
+        #on supprime ces triangles de la liste des triangles
+        list_of_triangles.remove(triangle)  
+      #on crée les deux nouveaux triangles 
+      last_idx += 1 
+      list_of_triangles.append(Triangle(vertex1_of_common_edge,vertex1,vertex2,last_idx)) 
+      last_idx += 1
+      list_of_triangles.append(Triangle(vertex2_of_common_edge,vertex1,vertex2,last_idx))
+    else : 
+    #on traite le 2eme cas 
+    vertex1_neighbours = neighbours_of_vertex(vertex1) 
+    vertex2_neighbours = neighbours_of_vertex(vertex2) 
+    common_neighbours = [] 
+    for neighbour_of_vertex1 in vertex1_neighbours : 
+      for neighbour_of_vertex2 in vertex1_neighbours : 
+        if is_the_same_vertex(neighbour_of_vertex1,neighbour_of_vertex2) : 
+          common_neighbours.append(neighbour_of_vertex1) 
+    #construire les nouveaux triangle  
     last_idx += 1 
-    list_of_triangles.append(Triangle(vertex1,vertex2,list_of_points[i],last_idx))  
+    list_of_triangles.append(Triangle(vertex1,vertex2,common_neighbours[0],last_idx)) 
+    last_idx += 1 
+    list_of_triangles.append(Triangle(vertex1,vertex2,common_neighbours[1],last_idx) 
+    
+
+    
+
+
+
+
+       
+        
+       
+        
+
+    
+
+
+
+
 
 
           
